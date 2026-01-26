@@ -15,7 +15,7 @@ import (
 )
 
 type reaper struct {
-	clientSet *kubernetes.Clientset
+	clientSet kubernetes.Interface
 	options   options
 }
 
@@ -23,22 +23,17 @@ func newReaper() reaper {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		logrus.WithError(err).Panic("error getting in cluster kubernetes config")
-		panic(err)
 	}
 	clientSet, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		logrus.WithError(err).Panic("unable to get client set for in cluster kubernetes config")
-		panic(err)
 	}
 	if clientSet == nil {
-		message := "kubernetes client set cannot be nil"
-		logrus.Panic(message)
-		panic(message)
+		logrus.Panic("kubernetes client set cannot be nil")
 	}
 	options, err := loadOptions()
 	if err != nil {
 		logrus.WithError(err).Panic("error loading options")
-		panic(err)
 	}
 	return reaper{
 		clientSet: clientSet,
@@ -61,12 +56,10 @@ func (reaper reaper) getPods() *v1.PodList {
 		listOptions.LabelSelector = selector.String()
 	}
 	podList, err := pods.List(context.TODO(), listOptions)
-	reaper.options.podSortingStrategy(podList.Items)
-
 	if err != nil {
 		logrus.WithError(err).Panic("unable to get pods from the cluster")
-		panic(err)
 	}
+	reaper.options.podSortingStrategy(podList.Items)
 	if reaper.options.annotationRequirement != nil {
 		podList.Items = filter(reaper, podList.Items...)
 	}
@@ -158,7 +151,6 @@ func (reaper reaper) harvest() {
 
 	if err != nil {
 		logrus.WithError(err).Panic("unable to create cron schedule: " + reaper.options.schedule)
-		panic(err)
 	}
 
 	schedule.Start()
