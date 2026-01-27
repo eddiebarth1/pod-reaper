@@ -91,9 +91,9 @@ func TestShouldReap(t *testing.T) {
 	})
 	t.Run("AND logic - one false rule prevents reap", func(t *testing.T) {
 		os.Clearenv()
-		os.Setenv(envChaosChance, "0.0")        // always false
-		os.Setenv(envContainerStatus, "Error")  // would match
-		os.Setenv(envMaxDuration, "1s")         // would match (pod is 2min old)
+		os.Setenv(envChaosChance, "0.0")       // always false
+		os.Setenv(envContainerStatus, "Error") // would match
+		os.Setenv(envMaxDuration, "1s")        // would match (pod is 2min old)
 		rules, _ := LoadRules()
 		shouldReap, reasons := rules.ShouldReap(testPod())
 		assert.False(t, shouldReap)
