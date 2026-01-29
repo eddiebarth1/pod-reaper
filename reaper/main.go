@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	joonix "github.com/joonix/log"
 	"github.com/sirupsen/logrus"
@@ -19,8 +22,22 @@ func main() {
 	logFormat := getLogFormat()
 	logrus.SetFormatter(logFormat)
 
+	// Create cancellable context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		sig := <-sigChan
+		logrus.WithField("signal", sig.String()).Info("received shutdown signal")
+		cancel()
+	}()
+
 	reaper := newReaper()
-	reaper.harvest()
+	reaper.harvest(ctx)
 	logrus.Info("pod reaper is exiting")
 }
 
@@ -32,7 +49,7 @@ func getLogLevel() logrus.Level {
 
 	level, err := logrus.ParseLevel(levelString)
 	if err != nil {
-		logrus.Errorf("error parsing %s: %v", envLogLevel, err)
+		logrus.WithError(err).WithField("env_var", envLogLevel).Error("error parsing log level")
 		return defaultLogLevel
 	}
 
@@ -46,7 +63,10 @@ func getLogFormat() logrus.Formatter {
 	} else if formatString == fluentdFormat {
 		return joonix.NewFormatter()
 	} else {
-		logrus.Errorf("unknown %s: %v", envLogFormat, formatString)
+		logrus.WithFields(logrus.Fields{
+			"env_var": envLogFormat,
+			"value":   formatString,
+		}).Error("unknown log format")
 		return &logrus.JSONFormatter{}
 	}
 }

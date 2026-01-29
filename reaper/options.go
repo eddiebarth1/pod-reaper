@@ -32,6 +32,8 @@ const envDryRun = "DRY_RUN"
 const envMaxPods = "MAX_PODS"
 const envPodSortingStrategy = "POD_SORTING_STRATEGY"
 const envEvict = "EVICT"
+const envAPITimeout = "API_TIMEOUT"
+const envDeletionDelay = "DELETION_DELAY"
 
 type options struct {
 	namespace             string
@@ -46,6 +48,8 @@ type options struct {
 	podSortingStrategy    func([]v1.Pod)
 	rules                 rules.Rules
 	evict                 bool
+	apiTimeout            time.Duration
+	deletionDelay         time.Duration
 }
 
 func namespace() string {
@@ -243,6 +247,14 @@ func evict() (bool, error) {
 	return strconv.ParseBool(value)
 }
 
+func apiTimeout() (time.Duration, error) {
+	return envDuration(envAPITimeout, "30s")
+}
+
+func deletionDelay() (time.Duration, error) {
+	return envDuration(envDeletionDelay, "0s")
+}
+
 func loadOptions() (options options, err error) {
 	options.namespace = namespace()
 	if options.gracePeriod, err = gracePeriod(); err != nil {
@@ -271,6 +283,12 @@ func loadOptions() (options options, err error) {
 		return options, err
 	}
 	if options.evict, err = evict(); err != nil {
+		return options, err
+	}
+	if options.apiTimeout, err = apiTimeout(); err != nil {
+		return options, err
+	}
+	if options.deletionDelay, err = deletionDelay(); err != nil {
 		return options, err
 	}
 

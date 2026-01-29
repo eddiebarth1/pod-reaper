@@ -2,16 +2,19 @@ package main
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 )
 
 type reaper struct {
@@ -41,7 +44,31 @@ func newReaper() reaper {
 	}
 }
 
-func (reaper reaper) getPods() *v1.PodList {
+// isTransientError returns true for errors that are likely transient and worth retrying
+func isTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Retry on rate limiting (429)
+	if apierrors.IsTooManyRequests(err) {
+		return true
+	}
+	// Retry on server errors (5xx)
+	if apierrors.IsServerTimeout(err) || apierrors.IsServiceUnavailable(err) {
+		return true
+	}
+	// Retry on internal errors
+	if apierrors.IsInternalError(err) {
+		return true
+	}
+	// Retry on context deadline exceeded (timeout) - may be transient
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	return false
+}
+
+func (reaper reaper) getPods(ctx context.Context) (*v1.PodList, error) {
 	coreClient := reaper.clientSet.CoreV1()
 	pods := coreClient.Pods(reaper.options.namespace)
 	listOptions := metav1.ListOptions{}
@@ -55,15 +82,29 @@ func (reaper reaper) getPods() *v1.PodList {
 		}
 		listOptions.LabelSelector = selector.String()
 	}
-	podList, err := pods.List(context.TODO(), listOptions)
+
+	var podList *v1.PodList
+	backoff := retry.DefaultBackoff
+	backoff.Steps = 3 // Max 3 retries
+
+	err := retry.OnError(backoff, isTransientError, func() error {
+		apiCtx, cancel := context.WithTimeout(ctx, reaper.options.apiTimeout)
+		defer cancel()
+
+		var listErr error
+		podList, listErr = pods.List(apiCtx, listOptions)
+		return listErr
+	})
+
 	if err != nil {
-		logrus.WithError(err).Panic("unable to get pods from the cluster")
+		return nil, err
 	}
+
 	reaper.options.podSortingStrategy(podList.Items)
 	if reaper.options.annotationRequirement != nil {
 		podList.Items = filter(reaper, podList.Items...)
 	}
-	return podList
+	return podList, nil
 }
 
 func filter(reaper reaper, pods ...v1.Pod) []v1.Pod {
@@ -77,19 +118,19 @@ func filter(reaper reaper, pods ...v1.Pod) []v1.Pod {
 	return filtered
 }
 
-func (reaper reaper) reapPod(pod v1.Pod, reasons []string, reapedPods int) {
+func (reaper reaper) reapPod(ctx context.Context, pod v1.Pod, reasons []string, reapedPods int) {
 	deleteOptions := &metav1.DeleteOptions{
 		GracePeriodSeconds: reaper.options.gracePeriod,
 	}
 
 	podLog := logrus.WithFields(logrus.Fields{
-		"pod":     pod.Name,
-		"reasons": reasons,
+		"pod":       pod.Name,
+		"namespace": pod.Namespace,
+		"reasons":   reasons,
 	})
 
 	if reaper.options.dryRun {
 		podLog.Info("pod would be reaped but pod-reaper is in dry-run mode")
-
 		return
 	}
 
@@ -98,40 +139,68 @@ func (reaper reaper) reapPod(pod v1.Pod, reasons []string, reapedPods int) {
 			"reapedPods": reapedPods,
 			"maxPods":    reaper.options.maxPods,
 		}).Info("pod would be reaped but maxPods is exceeded")
-
 		return
 	}
 
 	podLog.Info("reaping pod")
+
+	// Create context with timeout for the API call
+	apiCtx, cancel := context.WithTimeout(ctx, reaper.options.apiTimeout)
+	defer cancel()
+
 	var err error
 	if reaper.options.evict {
-		err = reaper.clientSet.PolicyV1().Evictions(pod.Namespace).Evict(context.TODO(), &policyv1.Eviction{
+		err = reaper.clientSet.PolicyV1().Evictions(pod.Namespace).Evict(apiCtx, &policyv1.Eviction{
 			ObjectMeta:    metav1.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name},
 			DeleteOptions: deleteOptions,
 		})
 	} else {
-		err = reaper.clientSet.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, *deleteOptions)
+		err = reaper.clientSet.CoreV1().Pods(pod.Namespace).Delete(apiCtx, pod.Name, *deleteOptions)
 	}
 	if err != nil {
-		// log the error, but continue on
-		logrus.WithFields(logrus.Fields{
-			"pod": pod.Name,
-		}).WithError(err).Warn("unable to delete pod", err)
+		podLog.WithError(err).Warn("unable to delete pod")
 	}
-
 }
 
-func (reaper reaper) scytheCycle() {
-	logrus.Debug("starting reap cycle")
-	pods := reaper.getPods()
+func (reaper reaper) scytheCycle(ctx context.Context) {
+	logrus.WithField("namespace", reaper.options.namespace).Debug("starting reap cycle")
+
+	pods, err := reaper.getPods(ctx)
+	if err != nil {
+		logrus.WithError(err).WithField("namespace", reaper.options.namespace).
+			Error("failed to get pods, skipping cycle")
+		return
+	}
+
 	reapedPods := 0
-	for _, pod := range pods.Items {
+	for i, pod := range pods.Items {
+		// Check for shutdown signal
+		select {
+		case <-ctx.Done():
+			logrus.Info("shutdown signal received during reap cycle, stopping")
+			return
+		default:
+		}
+
 		shouldReap, reasons := reaper.options.rules.ShouldReap(pod)
 		if shouldReap {
-			reaper.reapPod(pod, reasons, reapedPods)
+			reaper.reapPod(ctx, pod, reasons, reapedPods)
 			reapedPods++
+
+			// Apply deletion delay (rate limiting) if configured
+			// Don't delay after the last pod
+			if reaper.options.deletionDelay > 0 && i < len(pods.Items)-1 {
+				select {
+				case <-ctx.Done():
+					logrus.Info("shutdown signal received during deletion delay, stopping")
+					return
+				case <-time.After(reaper.options.deletionDelay):
+				}
+			}
 		}
 	}
+
+	logrus.WithField("reapedPods", reapedPods).Debug("completed reap cycle")
 }
 
 func cronWithOptionalSeconds() *cron.Cron {
@@ -142,23 +211,35 @@ func cronWithOptionalSeconds() *cron.Cron {
 				cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)))
 }
 
-func (reaper reaper) harvest() {
+func (reaper reaper) harvest(ctx context.Context) {
 	runForever := reaper.options.runDuration == 0
 	schedule := cronWithOptionalSeconds()
 	_, err := schedule.AddFunc(reaper.options.schedule, func() {
-		reaper.scytheCycle()
+		reaper.scytheCycle(ctx)
 	})
 
 	if err != nil {
-		logrus.WithError(err).Panic("unable to create cron schedule: " + reaper.options.schedule)
+		logrus.WithError(err).WithField("schedule", reaper.options.schedule).
+			Panic("unable to create cron schedule")
 	}
 
 	schedule.Start()
+	logrus.WithField("schedule", reaper.options.schedule).Info("started reap schedule")
 
 	if runForever {
-		select {} // should only fail if no routine can make progress
+		<-ctx.Done()
+		logrus.Info("shutdown signal received, stopping scheduler")
 	} else {
-		time.Sleep(reaper.options.runDuration)
-		schedule.Stop()
+		select {
+		case <-ctx.Done():
+			logrus.Info("shutdown signal received, stopping scheduler")
+		case <-time.After(reaper.options.runDuration):
+			logrus.Info("run duration elapsed, stopping scheduler")
+		}
 	}
+
+	// Stop the cron scheduler gracefully
+	stopCtx := schedule.Stop()
+	<-stopCtx.Done()
+	logrus.Info("scheduler stopped cleanly")
 }
