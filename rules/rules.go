@@ -42,7 +42,7 @@ func LoadRules() (Rules, error) {
 		if err != nil {
 			return Rules{LoadedRules: loadedRules}, err
 		} else if load {
-			logrus.Info("loaded rule: " + message)
+			logrus.WithField("rule", message).Info("loaded rule")
 			loadedRules = append(loadedRules, rule)
 		}
 	}

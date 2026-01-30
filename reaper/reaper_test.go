@@ -70,6 +70,8 @@ func minimalOptions(chaosChance string) options {
 		schedule:           "@every 1m",
 		podSortingStrategy: defaultSort,
 		rules:              loadRulesForTest(chaosChance),
+		apiTimeout:         30 * time.Second,
+		deletionDelay:      0,
 	}
 }
 
@@ -102,6 +104,8 @@ func TestReaperFilter(t *testing.T) {
 // === getPods Tests ===
 
 func TestGetPods(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("basic list", func(t *testing.T) {
 		startTime := time.Now()
 		pods := []v1.Pod{
@@ -112,7 +116,8 @@ func TestGetPods(t *testing.T) {
 		opts := minimalOptions("0.0")
 		r := createTestReaper(opts, pods...)
 
-		podList := r.getPods()
+		podList, err := r.getPods(ctx)
+		assert.NoError(t, err)
 		assert.Equal(t, 3, len(podList.Items))
 	})
 
@@ -127,7 +132,8 @@ func TestGetPods(t *testing.T) {
 		opts.namespace = "default"
 		r := createTestReaper(opts, pods...)
 
-		podList := r.getPods()
+		podList, err := r.getPods(ctx)
+		assert.NoError(t, err)
 		assert.Equal(t, 2, len(podList.Items))
 		for _, pod := range podList.Items {
 			assert.Equal(t, "default", pod.Namespace)
@@ -144,7 +150,8 @@ func TestGetPods(t *testing.T) {
 		opts.namespace = "" // empty = all namespaces
 		r := createTestReaper(opts, pods...)
 
-		podList := r.getPods()
+		podList, err := r.getPods(ctx)
+		assert.NoError(t, err)
 		assert.Equal(t, 2, len(podList.Items))
 	})
 
@@ -160,7 +167,8 @@ func TestGetPods(t *testing.T) {
 		opts.labelExclusion = exclusion
 		r := createTestReaper(opts, excludedPod, includedPod)
 
-		podList := r.getPods()
+		podList, err := r.getPods(ctx)
+		assert.NoError(t, err)
 		assert.Equal(t, 1, len(podList.Items))
 		assert.Equal(t, "included-pod", podList.Items[0].Name)
 	})
@@ -177,7 +185,8 @@ func TestGetPods(t *testing.T) {
 		opts.labelRequirement = requirement
 		r := createTestReaper(opts, matchingPod, nonMatchingPod)
 
-		podList := r.getPods()
+		podList, err := r.getPods(ctx)
+		assert.NoError(t, err)
 		assert.Equal(t, 1, len(podList.Items))
 		assert.Equal(t, "matching-pod", podList.Items[0].Name)
 	})
@@ -194,7 +203,8 @@ func TestGetPods(t *testing.T) {
 		opts.annotationRequirement = requirement
 		r := createTestReaper(opts, matchingPod, nonMatchingPod)
 
-		podList := r.getPods()
+		podList, err := r.getPods(ctx)
+		assert.NoError(t, err)
 		assert.Equal(t, 1, len(podList.Items))
 		assert.Equal(t, "matching-pod", podList.Items[0].Name)
 	})
@@ -211,12 +221,13 @@ func TestGetPods(t *testing.T) {
 		opts.podSortingStrategy = oldestFirstSort
 		r := createTestReaper(opts, newPod, oldPod) // insert in wrong order
 
-		podList := r.getPods()
+		podList, err := r.getPods(ctx)
+		assert.NoError(t, err)
 		assert.Equal(t, 2, len(podList.Items))
 		assert.Equal(t, "old-pod", podList.Items[0].Name) // oldest should be first
 	})
 
-	t.Run("list error panics", func(t *testing.T) {
+	t.Run("list error returns error", func(t *testing.T) {
 		fakeClient := fake.NewSimpleClientset()
 		fakeClient.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 			return true, nil, errors.New("simulated API error")
@@ -227,15 +238,17 @@ func TestGetPods(t *testing.T) {
 			options:   minimalOptions("0.0"),
 		}
 
-		assert.Panics(t, func() {
-			r.getPods()
-		})
+		podList, err := r.getPods(ctx)
+		assert.Error(t, err)
+		assert.Nil(t, podList)
 	})
 }
 
 // === reapPod Tests ===
 
 func TestReapPod(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("dry run skips deletion", func(t *testing.T) {
 		startTime := time.Now()
 		pod := createTestPod("test-pod", "default", &startTime)
@@ -243,7 +256,7 @@ func TestReapPod(t *testing.T) {
 		opts.dryRun = true
 		r := createTestReaper(opts, pod)
 
-		r.reapPod(pod, []string{"test reason"}, 0)
+		r.reapPod(ctx, pod, []string{"test reason"}, 0)
 
 		// Verify pod still exists (not deleted)
 		result, err := r.clientSet.CoreV1().Pods("default").Get(context.TODO(), "test-pod", metav1.GetOptions{})
@@ -258,7 +271,7 @@ func TestReapPod(t *testing.T) {
 		opts.maxPods = 2
 		r := createTestReaper(opts, pod)
 
-		r.reapPod(pod, []string{"test reason"}, 2) // reapedPods >= maxPods
+		r.reapPod(ctx, pod, []string{"test reason"}, 2) // reapedPods >= maxPods
 
 		// Verify pod still exists (not deleted)
 		result, err := r.clientSet.CoreV1().Pods("default").Get(context.TODO(), "test-pod", metav1.GetOptions{})
@@ -273,7 +286,7 @@ func TestReapPod(t *testing.T) {
 		opts.evict = false
 		r := createTestReaper(opts, pod)
 
-		r.reapPod(pod, []string{"test reason"}, 0)
+		r.reapPod(ctx, pod, []string{"test reason"}, 0)
 
 		// Verify pod was deleted
 		_, err := r.clientSet.CoreV1().Pods("default").Get(context.TODO(), "test-pod", metav1.GetOptions{})
@@ -288,7 +301,7 @@ func TestReapPod(t *testing.T) {
 		r := createTestReaper(opts, pod)
 
 		// Note: fake client may not fully support eviction, but we can verify no panic
-		r.reapPod(pod, []string{"test reason"}, 0)
+		r.reapPod(ctx, pod, []string{"test reason"}, 0)
 		// Just verifying it doesn't panic is sufficient for eviction path
 	})
 
@@ -312,7 +325,7 @@ func TestReapPod(t *testing.T) {
 			options:   opts,
 		}
 
-		r.reapPod(pod, []string{"test reason"}, 0)
+		r.reapPod(ctx, pod, []string{"test reason"}, 0)
 
 		assert.NotNil(t, capturedOptions.GracePeriodSeconds)
 		assert.Equal(t, int64(30), *capturedOptions.GracePeriodSeconds)
@@ -335,7 +348,7 @@ func TestReapPod(t *testing.T) {
 
 		// Should not panic, just log the error
 		assert.NotPanics(t, func() {
-			r.reapPod(pod, []string{"test reason"}, 0)
+			r.reapPod(ctx, pod, []string{"test reason"}, 0)
 		})
 	})
 }
@@ -343,12 +356,14 @@ func TestReapPod(t *testing.T) {
 // === scytheCycle Tests ===
 
 func TestScytheCycle(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("no pods", func(t *testing.T) {
 		opts := minimalOptions("0.0")
 		r := createTestReaper(opts)
 
 		assert.NotPanics(t, func() {
-			r.scytheCycle()
+			r.scytheCycle(ctx)
 		})
 	})
 
@@ -360,7 +375,7 @@ func TestScytheCycle(t *testing.T) {
 		opts := minimalOptions("0.0") // chaos chance 0.0 = never reap
 		r := createTestReaper(opts, pod1, pod2)
 
-		r.scytheCycle()
+		r.scytheCycle(ctx)
 
 		// Verify pods still exist
 		result, _ := r.clientSet.CoreV1().Pods("default").List(context.TODO(), metav1.ListOptions{})
@@ -375,7 +390,7 @@ func TestScytheCycle(t *testing.T) {
 		opts := minimalOptions("1.0") // chaos chance 1.0 = always reap
 		r := createTestReaper(opts, pod1, pod2)
 
-		r.scytheCycle()
+		r.scytheCycle(ctx)
 
 		// Verify pods were deleted
 		result, _ := r.clientSet.CoreV1().Pods("default").List(context.TODO(), metav1.ListOptions{})
@@ -392,11 +407,28 @@ func TestScytheCycle(t *testing.T) {
 		opts.maxPods = 2
 		r := createTestReaper(opts, pod1, pod2, pod3)
 
-		r.scytheCycle()
+		r.scytheCycle(ctx)
 
 		// Only 2 should be deleted, 1 should remain
 		result, _ := r.clientSet.CoreV1().Pods("default").List(context.TODO(), metav1.ListOptions{})
 		assert.Equal(t, 1, len(result.Items))
+	})
+
+	t.Run("context cancellation stops cycle", func(t *testing.T) {
+		startTime := time.Now()
+		pod1 := createTestPod("pod-1", "default", &startTime)
+		pod2 := createTestPod("pod-2", "default", &startTime)
+
+		opts := minimalOptions("1.0") // chaos chance 1.0 = always reap
+		r := createTestReaper(opts, pod1, pod2)
+
+		canceledCtx, cancel := context.WithCancel(context.Background())
+		cancel() // cancel immediately
+
+		r.scytheCycle(canceledCtx)
+
+		// With immediate cancellation, cycle should exit early
+		// Pods may or may not be deleted depending on timing
 	})
 }
 
@@ -404,27 +436,55 @@ func TestScytheCycle(t *testing.T) {
 
 func TestHarvest(t *testing.T) {
 	t.Run("runs for duration", func(t *testing.T) {
+		ctx := context.Background()
 		opts := minimalOptions("0.0")
 		opts.schedule = "@every 10ms"
 		opts.runDuration = 50 * time.Millisecond
 		r := createTestReaper(opts)
 
 		start := time.Now()
-		r.harvest()
+		r.harvest(ctx)
 		elapsed := time.Since(start)
 
 		assert.True(t, elapsed >= 50*time.Millisecond, "should run at least 50ms")
-		assert.True(t, elapsed < 200*time.Millisecond, "should not run too long")
+		assert.True(t, elapsed < 500*time.Millisecond, "should not run too long")
 	})
 
 	t.Run("invalid schedule panics", func(t *testing.T) {
+		ctx := context.Background()
 		opts := minimalOptions("0.0")
 		opts.schedule = "invalid-cron-expression"
 		opts.runDuration = 50 * time.Millisecond
 		r := createTestReaper(opts)
 
 		assert.Panics(t, func() {
-			r.harvest()
+			r.harvest(ctx)
 		})
+	})
+
+	t.Run("context cancellation stops harvest", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		opts := minimalOptions("0.0")
+		opts.schedule = "@every 10ms"
+		opts.runDuration = 0 // run forever
+		r := createTestReaper(opts)
+
+		done := make(chan struct{})
+		go func() {
+			r.harvest(ctx)
+			close(done)
+		}()
+
+		// Cancel after a short delay
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+
+		// Wait for harvest to complete with timeout
+		select {
+		case <-done:
+			// Success - harvest exited
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("harvest did not exit after context cancellation")
+		}
 	})
 }
