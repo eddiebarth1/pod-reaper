@@ -33,25 +33,25 @@ func TestChaosLoad(t *testing.T) {
 		assert.Equal(t, "", message)
 		assert.False(t, loaded)
 	})
-	t.Run("negative chance loads successfully", func(t *testing.T) {
+	t.Run("negative chance returns error", func(t *testing.T) {
 		os.Clearenv()
 		os.Setenv(envChaosChance, "-0.5")
 		c := chaos{}
 		loaded, message, err := c.load()
-		assert.NoError(t, err)
-		assert.True(t, loaded)
-		assert.Equal(t, "chaos chance -0.5", message)
-		assert.Equal(t, -0.5, c.chance)
+		assert.Error(t, err)
+		assert.False(t, loaded)
+		assert.Equal(t, "", message)
+		assert.Contains(t, err.Error(), "chaos chance must be between 0 and 1")
 	})
-	t.Run("chance above 1 loads successfully", func(t *testing.T) {
+	t.Run("chance above 1 returns error", func(t *testing.T) {
 		os.Clearenv()
 		os.Setenv(envChaosChance, "2.0")
 		c := chaos{}
 		loaded, message, err := c.load()
-		assert.NoError(t, err)
-		assert.True(t, loaded)
-		assert.Equal(t, "chaos chance 2.0", message)
-		assert.Equal(t, 2.0, c.chance)
+		assert.Error(t, err)
+		assert.False(t, loaded)
+		assert.Equal(t, "", message)
+		assert.Contains(t, err.Error(), "chaos chance must be between 0 and 1")
 	})
 	t.Run("whitespace causes parse error", func(t *testing.T) {
 		os.Clearenv()

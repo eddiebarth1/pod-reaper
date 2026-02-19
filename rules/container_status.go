@@ -21,7 +21,14 @@ func (rule *containerStatus) load() (bool, string, error) {
 	if !active {
 		return false, "", nil
 	}
-	rule.reapStatuses = strings.Split(value, ",")
+	parts := strings.Split(value, ",")
+	rule.reapStatuses = make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			rule.reapStatuses = append(rule.reapStatuses, trimmed)
+		}
+	}
 	return true, fmt.Sprintf("container status in [%s]", value), nil
 }
 
@@ -30,8 +37,8 @@ func (rule *containerStatus) ShouldReap(pod v1.Pod) (bool, string) {
 		for _, containerStatus := range pod.Status.ContainerStatuses {
 			state := containerStatus.State
 			// check both waiting and terminated conditions
-			if (state.Waiting != nil && state.Waiting.Reason == reapStatus) ||
-				(state.Terminated != nil && state.Terminated.Reason == reapStatus) {
+			if (state.Waiting != nil && strings.EqualFold(state.Waiting.Reason, reapStatus)) ||
+				(state.Terminated != nil && strings.EqualFold(state.Terminated.Reason, reapStatus)) {
 				return true, fmt.Sprintf("has container status %s", reapStatus)
 			}
 		}
@@ -40,8 +47,8 @@ func (rule *containerStatus) ShouldReap(pod v1.Pod) (bool, string) {
 		for _, initContainerStatus := range pod.Status.InitContainerStatuses {
 			state := initContainerStatus.State
 			// Check both waiting and terminated conditions for init containers
-			if (state.Waiting != nil && state.Waiting.Reason == reapStatus) ||
-				(state.Terminated != nil && state.Terminated.Reason == reapStatus) {
+			if (state.Waiting != nil && strings.EqualFold(state.Waiting.Reason, reapStatus)) ||
+				(state.Terminated != nil && strings.EqualFold(state.Terminated.Reason, reapStatus)) {
 				return true, fmt.Sprintf("has init container status %s", reapStatus)
 			}
 		}

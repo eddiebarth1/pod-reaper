@@ -149,16 +149,16 @@ func TestContainerStatusShouldReap(t *testing.T) {
 		shouldReap, _ := cs.ShouldReap(pod)
 		assert.False(t, shouldReap) // Running state has no Reason field to match
 	})
-	t.Run("whitespace in values not trimmed", func(t *testing.T) {
+	t.Run("whitespace in values is trimmed", func(t *testing.T) {
 		os.Clearenv()
 		os.Setenv(envContainerStatus, "Status1, Status2")
 		cs := containerStatus{}
 		cs.load()
-		// The second value is " Status2" with leading space
-		assert.Equal(t, " Status2", cs.reapStatuses[1])
-		// Pod with "Status2" (no space) won't match " Status2"
+		// The second value is "Status2" (trimmed)
+		assert.Equal(t, "Status2", cs.reapStatuses[1])
+		// Pod with "Status2" (no space) will match "Status2"
 		pod := testStatusPod(testWaitContainerState("Status2"))
 		shouldReap, _ := cs.ShouldReap(pod)
-		assert.False(t, shouldReap)
+		assert.True(t, shouldReap)
 	})
 }

@@ -21,15 +21,22 @@ func (rule *podStatusPhase) load() (bool, string, error) {
 	if !active {
 		return false, "", nil
 	}
-	rule.reapStatusPhases = strings.Split(value, ",")
+	parts := strings.Split(value, ",")
+	rule.reapStatusPhases = make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			rule.reapStatusPhases = append(rule.reapStatusPhases, trimmed)
+		}
+	}
 	return true, fmt.Sprintf("pod status phase in [%s]", value), nil
 }
 
 func (rule *podStatusPhase) ShouldReap(pod v1.Pod) (bool, string) {
 	status := string(pod.Status.Phase)
 	for _, reapStatusPhase := range rule.reapStatusPhases {
-		if status == reapStatusPhase {
-			return true, fmt.Sprintf("has pod status phase %s", reapStatusPhase)
+		if strings.EqualFold(status, reapStatusPhase) {
+			return true, fmt.Sprintf("has pod status phase %s", status)
 		}
 	}
 	return false, ""

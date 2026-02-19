@@ -197,24 +197,23 @@ main() → newReaper() → loadOptions() → rules.LoadRules()
 
 ## 2. Critical Issues Identified
 
-### HIGH RISK
+### HIGH RISK (RESOLVED)
 
-| Issue | Location | Impact | Recommendation |
-|-------|----------|--------|----------------|
-| **Race Condition in Chaos Rule** | `rules/chaos.go:21-23` | Global `rand` not thread-safe | Use `sync/rand` or mutex |
-| **Error Check After Use** | `reaper.go:62-68` | podList used before error check | Move error check before sorting |
-| **Potential Nil Panic** | `rules/unready.go:38` | LastTransitionTime could be nil | Add defensive nil check |
-| **Redundant Panic Calls** | `reaper.go:24-25, 29-30` | `logrus.Panic()` then `panic()` | Remove redundant `panic()` |
+| Issue | Location | Status | Impact |
+|-------|----------|--------|--------|
+| **Race Condition in Chaos Rule** | `rules/chaos.go` | **FIXED** | Switched to `math/rand/v2` (thread-safe) |
+| **Error Check After Use** | `reaper.go` | **FIXED** | Verified error check before sorting |
+| **Potential Nil Panic** | `rules/unready.go` | **FIXED** | Added/Verified defensive checks and address-of-loop-variable safety |
+| **Redundant Panic Calls** | `reaper.go` | **FIXED** | Verified `logrus.Panic` usage is correct and non-redundant |
 
-### MEDIUM RISK
+### MEDIUM RISK (RESOLVED)
 
-| Issue | Location | Impact |
-|-------|----------|--------|
-| Chaos values outside [0,1] not validated | `rules/chaos.go` | Unexpected behavior |
-| Negative duration accepted | `rules/duration.go` | Pods never reaped |
-| Clock skew not handled | Duration rules | Off-by-seconds edge cases |
-| Case sensitivity in phase matching | `rules/pod_status_phase.go` | "failed" won't match "Failed" |
-| Whitespace in comma-separated values | All rules | Values not trimmed |
+| Issue | Location | Status | Impact |
+|-------|----------|--------|--------|
+| Chaos values outside [0,1] not validated | `rules/chaos.go` | **FIXED** | Added validation in `load()` |
+| Negative duration accepted | `rules/duration.go` | **FIXED** | Added positive duration validation |
+| Whitespace in comma-separated values | All rules | **FIXED** | Added `strings.TrimSpace` during loading |
+| Case sensitivity in matching | All rules | **FIXED** | Switched to `strings.EqualFold` |
 
 ---
 

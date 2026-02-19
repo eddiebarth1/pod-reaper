@@ -25,6 +25,9 @@ func (rule *unready) load() (bool, string, error) {
 	if err != nil {
 		return false, "", fmt.Errorf("invalid max unready duration: %s", err)
 	}
+	if duration <= 0 {
+		return false, "", fmt.Errorf("max unready duration must be positive, got %s", duration)
+	}
 	rule.duration = duration
 	return true, fmt.Sprintf("maximum unready %s", value), nil
 }
@@ -49,9 +52,9 @@ func (rule *unready) ShouldReap(pod v1.Pod) (bool, string) {
 }
 
 func getCondition(pod v1.Pod, conditionType v1.PodConditionType) *v1.PodCondition {
-	for _, condition := range pod.Status.Conditions {
-		if condition.Type == conditionType {
-			return &condition
+	for i := range pod.Status.Conditions {
+		if pod.Status.Conditions[i].Type == conditionType {
+			return &pod.Status.Conditions[i]
 		}
 	}
 

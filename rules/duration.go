@@ -25,6 +25,9 @@ func (rule *duration) load() (bool, string, error) {
 	if err != nil {
 		return false, "", fmt.Errorf("invalid max duration: %s", err)
 	}
+	if duration <= 0 {
+		return false, "", fmt.Errorf("max duration must be positive, got %s", duration)
+	}
 	rule.duration = duration
 	return true, fmt.Sprintf("maximum run duration %s", value), nil
 }

@@ -26,6 +26,11 @@ func (rule *chaos) load() (bool, string, error) {
 	if err != nil {
 		return false, "", fmt.Errorf("invalid chaos chance %s", err)
 	}
+
+	if chance < 0 || chance > 1 {
+		return false, "", fmt.Errorf("chaos chance must be between 0 and 1 (inclusive), got %f", chance)
+	}
+
 	rule.chance = chance
 	return true, fmt.Sprintf("chaos chance %s", value), nil
 }

@@ -66,36 +66,36 @@ func TestPodStatusShouldReap(t *testing.T) {
 		shouldReap, _ := podStatus.ShouldReap(pod)
 		assert.False(t, shouldReap)
 	})
-	t.Run("whitespace in values not trimmed", func(t *testing.T) {
+	t.Run("whitespace in values is trimmed", func(t *testing.T) {
 		os.Clearenv()
 		os.Setenv(envPodStatus, "Evicted, Unknown")
 		ps := podStatus{}
 		ps.load()
-		// The second value is " Unknown" with leading space
-		assert.Equal(t, " Unknown", ps.reapStatuses[1])
-		// Pod with "Unknown" (no space) won't match " Unknown"
+		// The second value is "Unknown" (trimmed)
+		assert.Equal(t, "Unknown", ps.reapStatuses[1])
+		// Pod with "Unknown" (no space) will match "Unknown"
 		pod := testPodFromReason("Unknown")
 		shouldReap, _ := ps.ShouldReap(pod)
-		assert.False(t, shouldReap)
+		assert.True(t, shouldReap)
 	})
-	t.Run("case sensitivity - no match", func(t *testing.T) {
+	t.Run("case sensitivity - matches successfully", func(t *testing.T) {
 		os.Clearenv()
 		os.Setenv(envPodStatus, "evicted")
 		ps := podStatus{}
 		ps.load()
 		pod := testPodFromReason("Evicted")
 		shouldReap, _ := ps.ShouldReap(pod)
-		assert.False(t, shouldReap) // "evicted" != "Evicted"
+		assert.True(t, shouldReap) // "evicted" matches "Evicted" case-insensitively
 	})
-	t.Run("empty reason matches empty status", func(t *testing.T) {
+	t.Run("empty reason in env var is ignored", func(t *testing.T) {
 		os.Clearenv()
 		os.Setenv(envPodStatus, "")
 		ps := podStatus{}
 		ps.load()
-		// reapStatuses will be [""] (single empty string)
-		assert.Equal(t, []string{""}, ps.reapStatuses)
+		// reapStatuses will be empty slice
+		assert.Equal(t, []string{}, ps.reapStatuses)
 		pod := testPodFromReason("")
 		shouldReap, _ := ps.ShouldReap(pod)
-		assert.True(t, shouldReap) // "" == ""
+		assert.False(t, shouldReap)
 	})
 }

@@ -66,26 +66,26 @@ func TestPodStatusPhaseShouldReap(t *testing.T) {
 		shouldReap, _ := podStatusPhase.ShouldReap(pod)
 		assert.False(t, shouldReap)
 	})
-	t.Run("whitespace in values not trimmed", func(t *testing.T) {
+	t.Run("whitespace in values is trimmed", func(t *testing.T) {
 		os.Clearenv()
 		os.Setenv(envPodStatusPhase, "Failed, Unknown")
 		psp := podStatusPhase{}
 		psp.load()
-		// The second value is " Unknown" with leading space
-		assert.Equal(t, " Unknown", psp.reapStatusPhases[1])
-		// Pod with "Unknown" (no space) won't match " Unknown"
+		// The second value is "Unknown" (trimmed)
+		assert.Equal(t, "Unknown", psp.reapStatusPhases[1])
+		// Pod with "Unknown" (no space) will match "Unknown"
 		pod := testPodFromPhase(v1.PodUnknown)
 		shouldReap, _ := psp.ShouldReap(pod)
-		assert.False(t, shouldReap)
+		assert.True(t, shouldReap)
 	})
-	t.Run("case sensitivity - lowercase fails to match", func(t *testing.T) {
+	t.Run("case sensitivity - lowercase matches successfully", func(t *testing.T) {
 		os.Clearenv()
 		os.Setenv(envPodStatusPhase, "failed")
 		psp := podStatusPhase{}
 		psp.load()
 		pod := testPodFromPhase(v1.PodFailed) // "Failed" in K8s
 		shouldReap, _ := psp.ShouldReap(pod)
-		assert.False(t, shouldReap) // "failed" != "Failed"
+		assert.True(t, shouldReap) // "failed" matches "Failed" case-insensitively
 	})
 	t.Run("all valid phases", func(t *testing.T) {
 		phases := []v1.PodPhase{

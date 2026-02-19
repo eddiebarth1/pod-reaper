@@ -1,0 +1,1091 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>reaper: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/target/pod-reaper/reaper/main.go (50.0%)</option>
+				
+				<option value="file1">github.com/target/pod-reaper/reaper/options.go (91.9%)</option>
+				
+				<option value="file2">github.com/target/pod-reaper/reaper/reaper.go (77.8%)</option>
+				
+				<option value="file3">github.com/target/pod-reaper/rules/chaos.go (100.0%)</option>
+				
+				<option value="file4">github.com/target/pod-reaper/rules/container_status.go (100.0%)</option>
+				
+				<option value="file5">github.com/target/pod-reaper/rules/duration.go (100.0%)</option>
+				
+				<option value="file6">github.com/target/pod-reaper/rules/pod_status.go (100.0%)</option>
+				
+				<option value="file7">github.com/target/pod-reaper/rules/pod_status_phase.go (100.0%)</option>
+				
+				<option value="file8">github.com/target/pod-reaper/rules/rules.go (100.0%)</option>
+				
+				<option value="file9">github.com/target/pod-reaper/rules/unready.go (100.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package main
+
+import (
+        "context"
+        "os"
+        "os/signal"
+        "syscall"
+
+        joonix "github.com/joonix/log"
+        "github.com/sirupsen/logrus"
+)
+
+const envLogLevel = "LOG_LEVEL"
+const envLogFormat = "LOG_FORMAT"
+const fluentdFormat = "Fluentd"
+const logrusFormat = "Logrus"
+const defaultLogLevel = logrus.InfoLevel
+
+func main() <span class="cov0" title="0">{
+        logLevel := getLogLevel()
+        logrus.SetLevel(logLevel)
+        logFormat := getLogFormat()
+        logrus.SetFormatter(logFormat)
+
+        // Create cancellable context for graceful shutdown
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+
+        // Set up signal handling for graceful shutdown
+        sigChan := make(chan os.Signal, 1)
+        signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+
+        go func() </span><span class="cov0" title="0">{
+                sig := &lt;-sigChan
+                logrus.WithField("signal", sig.String()).Info("received shutdown signal")
+                cancel()
+        }</span>()
+
+        <span class="cov0" title="0">reaper := newReaper()
+        reaper.harvest(ctx)
+        logrus.Info("pod reaper is exiting")</span>
+}
+
+func getLogLevel() logrus.Level <span class="cov10" title="8">{
+        levelString, exists := os.LookupEnv(envLogLevel)
+        if !exists </span><span class="cov1" title="1">{
+                return defaultLogLevel
+        }</span>
+
+        <span class="cov9" title="7">level, err := logrus.ParseLevel(levelString)
+        if err != nil </span><span class="cov1" title="1">{
+                logrus.WithError(err).WithField("env_var", envLogLevel).Error("error parsing log level")
+                return defaultLogLevel
+        }</span>
+
+        <span class="cov8" title="6">return level</span>
+}
+
+func getLogFormat() logrus.Formatter <span class="cov7" title="4">{
+        formatString, exists := os.LookupEnv(envLogFormat)
+        if !exists || formatString == logrusFormat </span><span class="cov4" title="2">{
+                return &amp;logrus.JSONFormatter{}
+        }</span> else<span class="cov4" title="2"> if formatString == fluentdFormat </span><span class="cov1" title="1">{
+                return joonix.NewFormatter()
+        }</span> else<span class="cov1" title="1"> {
+                logrus.WithFields(logrus.Fields{
+                        "env_var": envLogFormat,
+                        "value":   formatString,
+                }).Error("unknown log format")
+                return &amp;logrus.JSONFormatter{}
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package main
+
+import (
+        "errors"
+        "fmt"
+        v1 "k8s.io/api/core/v1"
+        "math/rand"
+        "os"
+        "sort"
+        "strconv"
+        "strings"
+        "time"
+
+        "k8s.io/apimachinery/pkg/labels"
+        "k8s.io/apimachinery/pkg/selection"
+
+        "github.com/target/pod-reaper/rules"
+)
+
+// environment variable names
+const envNamespace = "NAMESPACE"
+const envGracePeriod = "GRACE_PERIOD"
+const envScheduleCron = "SCHEDULE"
+const envRunDuration = "RUN_DURATION"
+const envExcludeLabelKey = "EXCLUDE_LABEL_KEY"
+const envExcludeLabelValues = "EXCLUDE_LABEL_VALUES"
+const envRequireLabelKey = "REQUIRE_LABEL_KEY"
+const envRequireLabelValues = "REQUIRE_LABEL_VALUES"
+const envRequireAnnotationKey = "REQUIRE_ANNOTATION_KEY"
+const envRequireAnnotationValues = "REQUIRE_ANNOTATION_VALUES"
+const envDryRun = "DRY_RUN"
+const envMaxPods = "MAX_PODS"
+const envPodSortingStrategy = "POD_SORTING_STRATEGY"
+const envEvict = "EVICT"
+const envAPITimeout = "API_TIMEOUT"
+const envDeletionDelay = "DELETION_DELAY"
+
+type options struct {
+        namespace             string
+        gracePeriod           *int64
+        schedule              string
+        runDuration           time.Duration
+        labelExclusion        *labels.Requirement
+        labelRequirement      *labels.Requirement
+        annotationRequirement *labels.Requirement
+        dryRun                bool
+        maxPods               int
+        podSortingStrategy    func([]v1.Pod)
+        rules                 rules.Rules
+        evict                 bool
+        apiTimeout            time.Duration
+        deletionDelay         time.Duration
+}
+
+func namespace() string <span class="cov5" title="5">{
+        return os.Getenv(envNamespace)
+}</span>
+
+func gracePeriod() (*int64, error) <span class="cov5" title="6">{
+        envGraceDuration, exists := os.LookupEnv(envGracePeriod)
+        if !exists </span><span class="cov4" title="4">{
+                return nil, nil
+        }</span>
+        <span class="cov2" title="2">duration, err := time.ParseDuration(envGraceDuration)
+        if err != nil </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("invalid %s: %s", envGracePeriod, err)
+        }</span>
+        <span class="cov1" title="1">seconds := int64(duration.Seconds())
+        return &amp;seconds, nil</span>
+}
+
+func envDuration(key string, defValue string) (time.Duration, error) <span class="cov7" title="10">{
+        envDuration, exists := os.LookupEnv(key)
+        if !exists </span><span class="cov6" title="7">{
+                envDuration = defValue
+        }</span>
+        <span class="cov7" title="10">duration, err := time.ParseDuration(envDuration)
+        if err != nil </span><span class="cov2" title="2">{
+                return duration, fmt.Errorf("invalid %s: %s", key, err)
+        }</span>
+        <span class="cov6" title="8">return duration, nil</span>
+}
+
+func schedule() string <span class="cov4" title="4">{
+        schedule, exists := os.LookupEnv(envScheduleCron)
+        if !exists </span><span class="cov4" title="4">{
+                schedule = "@every 1m"
+        }</span>
+        <span class="cov4" title="4">return schedule</span>
+}
+
+func runDuration() (time.Duration, error) <span class="cov5" title="6">{
+        return envDuration(envRunDuration, "0s")
+}</span>
+
+func labelExclusion() (*labels.Requirement, error) <span class="cov6" title="7">{
+        labelKey, labelKeyExists := os.LookupEnv(envExcludeLabelKey)
+        labelValue, labelValuesExist := os.LookupEnv(envExcludeLabelValues)
+        if labelKeyExists &amp;&amp; !labelValuesExist </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("specified %s but not %s", envExcludeLabelKey, envExcludeLabelValues)
+        }</span> else<span class="cov5" title="6"> if !labelKeyExists &amp;&amp; labelValuesExist </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("did not specify %s but did specify %s", envExcludeLabelKey, envExcludeLabelValues)
+        }</span> else<span class="cov5" title="5"> if !labelKeyExists &amp;&amp; !labelValuesExist </span><span class="cov3" title="3">{
+                return nil, nil
+        }</span>
+        <span class="cov2" title="2">labelValues := strings.Split(labelValue, ",")
+        labelExclusion, err := labels.NewRequirement(labelKey, selection.NotIn, labelValues)
+        if err != nil </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("could not create exclusion label: %s", err)
+        }</span>
+        <span class="cov1" title="1">return labelExclusion, nil</span>
+}
+
+func labelRequirement() (*labels.Requirement, error) <span class="cov6" title="7">{
+        labelKey, labelKeyExists := os.LookupEnv(envRequireLabelKey)
+        labelValue, labelValuesExist := os.LookupEnv(envRequireLabelValues)
+        if labelKeyExists &amp;&amp; !labelValuesExist </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("specified %s but not %s", envRequireLabelKey, envRequireLabelValues)
+        }</span> else<span class="cov5" title="6"> if !labelKeyExists &amp;&amp; labelValuesExist </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("did not specify %s but did specify %s", envRequireLabelKey, envRequireLabelValues)
+        }</span> else<span class="cov5" title="5"> if !labelKeyExists &amp;&amp; !labelValuesExist </span><span class="cov3" title="3">{
+                return nil, nil
+        }</span>
+        <span class="cov2" title="2">labelValues := strings.Split(labelValue, ",")
+        labelRequirement, err := labels.NewRequirement(labelKey, selection.In, labelValues)
+        if err != nil </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("could not create requirement label: %s", err)
+        }</span>
+        <span class="cov1" title="1">return labelRequirement, nil</span>
+}
+
+func annotationRequirement() (*labels.Requirement, error) <span class="cov6" title="7">{
+        annotationKey, annotationKeyExists := os.LookupEnv(envRequireAnnotationKey)
+        annotationValue, annotationValuesExist := os.LookupEnv(envRequireAnnotationValues)
+        if annotationKeyExists &amp;&amp; !annotationValuesExist </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("specified %s but not %s", envRequireAnnotationKey, envRequireAnnotationValues)
+        }</span> else<span class="cov5" title="6"> if !annotationKeyExists &amp;&amp; annotationValuesExist </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("did not specify %s but did specify %s", envRequireAnnotationKey, envRequireAnnotationValues)
+        }</span> else<span class="cov5" title="5"> if !annotationKeyExists &amp;&amp; !annotationValuesExist </span><span class="cov3" title="3">{
+                return nil, nil
+        }</span>
+        <span class="cov2" title="2">annotationValues := strings.Split(annotationValue, ",")
+        annotationRequirement, err := labels.NewRequirement(annotationKey, selection.In, annotationValues)
+        if err != nil </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("could not create annotation requirement: %s", err)
+        }</span>
+        <span class="cov1" title="1">return annotationRequirement, nil</span>
+}
+
+func dryRun() (bool, error) <span class="cov6" title="7">{
+        value, exists := os.LookupEnv(envDryRun)
+        if !exists </span><span class="cov3" title="3">{
+                return false, nil
+        }</span>
+        <span class="cov4" title="4">return strconv.ParseBool(value)</span>
+}
+
+func maxPods() (int, error) <span class="cov5" title="6">{
+        value, exists := os.LookupEnv(envMaxPods)
+        if !exists </span><span class="cov3" title="3">{
+                return 0, nil
+        }</span>
+
+        <span class="cov3" title="3">v, err := strconv.Atoi(value)
+        if err != nil </span><span class="cov1" title="1">{
+                return 0, err
+        }</span>
+
+        <span class="cov2" title="2">if v &lt; 0 </span><span class="cov1" title="1">{
+                return 0, nil
+        }</span>
+
+        <span class="cov1" title="1">return v, nil</span>
+}
+
+func getPodDeletionCost(pod v1.Pod) int32 <span class="cov6" title="8">{
+        // https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#pod-deletion-cost
+        costString, present := pod.ObjectMeta.Annotations["controller.kubernetes.io/pod-deletion-cost"]
+        if !present </span><span class="cov2" title="2">{
+                return 0
+        }</span>
+        // per k8s doc: invalid values should be rejected by the API server
+        <span class="cov5" title="6">cost, _ := strconv.ParseInt(costString, 10, 32)
+        return int32(cost)</span>
+}
+
+func defaultSort([]v1.Pod) {<span class="cov7" title="12">}</span>
+
+func randomSort(pods []v1.Pod) <span class="cov7" title="10">{
+        rand.Shuffle(len(pods), func(i, j int) </span><span class="cov10" title="30">{ pods[i], pods[j] = pods[j], pods[i] }</span>)
+}
+
+func oldestFirstSort(pods []v1.Pod) <span class="cov2" title="2">{
+        sort.Slice(pods, func(i, j int) bool </span><span class="cov6" title="7">{
+                if pods[i].Status.StartTime == nil </span><span class="cov1" title="1">{
+                        return false
+                }</span>
+                <span class="cov5" title="6">if pods[j].Status.StartTime == nil </span><span class="cov2" title="2">{
+                        return true
+                }</span>
+                <span class="cov4" title="4">return pods[i].Status.StartTime.Unix() &lt; pods[j].Status.StartTime.Unix()</span>
+        })
+}
+
+func youngestFirstSort(pods []v1.Pod) <span class="cov1" title="1">{
+        sort.Slice(pods, func(i, j int) bool </span><span class="cov5" title="5">{
+                if pods[i].Status.StartTime == nil </span><span class="cov1" title="1">{
+                        return false
+                }</span>
+                <span class="cov4" title="4">if pods[j].Status.StartTime == nil </span><span class="cov2" title="2">{
+                        return true
+                }</span>
+                <span class="cov2" title="2">return pods[j].Status.StartTime.Unix() &lt; pods[i].Status.StartTime.Unix()</span>
+        })
+}
+
+func podDeletionCostSort(pods []v1.Pod) <span class="cov1" title="1">{
+        sort.Slice(pods, func(i, j int) bool </span><span class="cov4" title="4">{
+                return getPodDeletionCost(pods[i]) &lt; getPodDeletionCost(pods[j])
+        }</span>)
+}
+
+func podSortingStrategy() (func([]v1.Pod), error) <span class="cov6" title="8">{
+        sortingStrategy, present := os.LookupEnv(envPodSortingStrategy)
+        if !present </span><span class="cov3" title="3">{
+                return defaultSort, nil
+        }</span>
+        <span class="cov5" title="5">switch sortingStrategy </span>{
+        case "random":<span class="cov1" title="1">
+                return randomSort, nil</span>
+        case "oldest-first":<span class="cov1" title="1">
+                return oldestFirstSort, nil</span>
+        case "youngest-first":<span class="cov1" title="1">
+                return youngestFirstSort, nil</span>
+        case "pod-deletion-cost":<span class="cov1" title="1">
+                return podDeletionCostSort, nil</span>
+        default:<span class="cov1" title="1">
+                return nil, errors.New("unknown pod sorting strategy")</span>
+        }
+}
+
+func evict() (bool, error) <span class="cov2" title="2">{
+        value, exists := os.LookupEnv(envEvict)
+        if !exists </span><span class="cov2" title="2">{
+                return false, nil
+        }</span>
+        <span class="cov0" title="0">return strconv.ParseBool(value)</span>
+}
+
+func apiTimeout() (time.Duration, error) <span class="cov2" title="2">{
+        return envDuration(envAPITimeout, "30s")
+}</span>
+
+func deletionDelay() (time.Duration, error) <span class="cov2" title="2">{
+        return envDuration(envDeletionDelay, "0s")
+}</span>
+
+func loadOptions() (options options, err error) <span class="cov3" title="3">{
+        options.namespace = namespace()
+        if options.gracePeriod, err = gracePeriod(); err != nil </span><span class="cov0" title="0">{
+                return options, err
+        }</span>
+        <span class="cov3" title="3">options.schedule = schedule()
+        if options.runDuration, err = runDuration(); err != nil </span><span class="cov1" title="1">{
+                return options, err
+        }</span>
+        <span class="cov2" title="2">if options.labelExclusion, err = labelExclusion(); err != nil </span><span class="cov0" title="0">{
+                return options, err
+        }</span>
+        <span class="cov2" title="2">if options.labelRequirement, err = labelRequirement(); err != nil </span><span class="cov0" title="0">{
+                return options, err
+        }</span>
+        <span class="cov2" title="2">if options.annotationRequirement, err = annotationRequirement(); err != nil </span><span class="cov0" title="0">{
+                return options, err
+        }</span>
+        <span class="cov2" title="2">if options.dryRun, err = dryRun(); err != nil </span><span class="cov0" title="0">{
+                return options, err
+        }</span>
+        <span class="cov2" title="2">if options.maxPods, err = maxPods(); err != nil </span><span class="cov0" title="0">{
+                return options, err
+        }</span>
+        <span class="cov2" title="2">if options.podSortingStrategy, err = podSortingStrategy(); err != nil </span><span class="cov0" title="0">{
+                return options, err
+        }</span>
+        <span class="cov2" title="2">if options.evict, err = evict(); err != nil </span><span class="cov0" title="0">{
+                return options, err
+        }</span>
+        <span class="cov2" title="2">if options.apiTimeout, err = apiTimeout(); err != nil </span><span class="cov0" title="0">{
+                return options, err
+        }</span>
+        <span class="cov2" title="2">if options.deletionDelay, err = deletionDelay(); err != nil </span><span class="cov0" title="0">{
+                return options, err
+        }</span>
+
+        // rules
+        <span class="cov2" title="2">if options.rules, err = rules.LoadRules(); err != nil </span><span class="cov1" title="1">{
+                return options, err
+        }</span>
+        <span class="cov1" title="1">return options, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package main
+
+import (
+        "context"
+        "errors"
+        "time"
+
+        "github.com/robfig/cron/v3"
+        "github.com/sirupsen/logrus"
+        v1 "k8s.io/api/core/v1"
+        policyv1 "k8s.io/api/policy/v1"
+        apierrors "k8s.io/apimachinery/pkg/api/errors"
+        metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+        "k8s.io/apimachinery/pkg/labels"
+        "k8s.io/client-go/kubernetes"
+        "k8s.io/client-go/rest"
+        "k8s.io/client-go/util/retry"
+)
+
+type reaper struct {
+        clientSet kubernetes.Interface
+        options   options
+}
+
+func newReaper() reaper <span class="cov0" title="0">{
+        config, err := rest.InClusterConfig()
+        if err != nil </span><span class="cov0" title="0">{
+                logrus.WithError(err).Panic("error getting in cluster kubernetes config")
+        }</span>
+        <span class="cov0" title="0">clientSet, err := kubernetes.NewForConfig(config)
+        if err != nil </span><span class="cov0" title="0">{
+                logrus.WithError(err).Panic("unable to get client set for in cluster kubernetes config")
+        }</span>
+        <span class="cov0" title="0">if clientSet == nil </span><span class="cov0" title="0">{
+                logrus.Panic("kubernetes client set cannot be nil")
+        }</span>
+        <span class="cov0" title="0">options, err := loadOptions()
+        if err != nil </span><span class="cov0" title="0">{
+                logrus.WithError(err).Panic("error loading options")
+        }</span>
+        <span class="cov0" title="0">return reaper{
+                clientSet: clientSet,
+                options:   options,
+        }</span>
+}
+
+// isTransientError returns true for errors that are likely transient and worth retrying
+func isTransientError(err error) bool <span class="cov1" title="1">{
+        if err == nil </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        // Retry on rate limiting (429)
+        <span class="cov1" title="1">if apierrors.IsTooManyRequests(err) </span><span class="cov0" title="0">{
+                return true
+        }</span>
+        // Retry on server errors (5xx)
+        <span class="cov1" title="1">if apierrors.IsServerTimeout(err) || apierrors.IsServiceUnavailable(err) </span><span class="cov0" title="0">{
+                return true
+        }</span>
+        // Retry on internal errors
+        <span class="cov1" title="1">if apierrors.IsInternalError(err) </span><span class="cov0" title="0">{
+                return true
+        }</span>
+        // Retry on context deadline exceeded (timeout) - may be transient
+        <span class="cov1" title="1">if errors.Is(err, context.DeadlineExceeded) </span><span class="cov0" title="0">{
+                return true
+        }</span>
+        <span class="cov1" title="1">return false</span>
+}
+
+func (reaper reaper) getPods(ctx context.Context) (*v1.PodList, error) <span class="cov10" title="13">{
+        coreClient := reaper.clientSet.CoreV1()
+        pods := coreClient.Pods(reaper.options.namespace)
+        listOptions := metav1.ListOptions{}
+        if reaper.options.labelExclusion != nil || reaper.options.labelRequirement != nil </span><span class="cov3" title="2">{
+                selector := labels.NewSelector()
+                if reaper.options.labelExclusion != nil </span><span class="cov1" title="1">{
+                        selector = selector.Add(*reaper.options.labelExclusion)
+                }</span>
+                <span class="cov3" title="2">if reaper.options.labelRequirement != nil </span><span class="cov1" title="1">{
+                        selector = selector.Add(*reaper.options.labelRequirement)
+                }</span>
+                <span class="cov3" title="2">listOptions.LabelSelector = selector.String()</span>
+        }
+
+        <span class="cov10" title="13">var podList *v1.PodList
+        backoff := retry.DefaultBackoff
+        backoff.Steps = 3 // Max 3 retries
+
+        err := retry.OnError(backoff, isTransientError, func() error </span><span class="cov10" title="13">{
+                apiCtx, cancel := context.WithTimeout(ctx, reaper.options.apiTimeout)
+                defer cancel()
+
+                var listErr error
+                podList, listErr = pods.List(apiCtx, listOptions)
+                return listErr
+        }</span>)
+
+        <span class="cov10" title="13">if err != nil </span><span class="cov1" title="1">{
+                return nil, err
+        }</span>
+
+        <span class="cov9" title="12">reaper.options.podSortingStrategy(podList.Items)
+        if reaper.options.annotationRequirement != nil </span><span class="cov1" title="1">{
+                podList.Items = filter(reaper, podList.Items...)
+        }</span>
+        <span class="cov9" title="12">return podList, nil</span>
+}
+
+func filter(reaper reaper, pods ...v1.Pod) []v1.Pod <span class="cov3" title="2">{
+        var filtered []v1.Pod
+        for _, pod := range pods </span><span class="cov5" title="4">{
+                selector := labels.Set(pod.Annotations)
+                if reaper.options.annotationRequirement.Matches(selector) </span><span class="cov3" title="2">{
+                        filtered = append(filtered, pod)
+                }</span>
+        }
+        <span class="cov3" title="2">return filtered</span>
+}
+
+func (reaper reaper) reapPod(ctx context.Context, pod v1.Pod, reasons []string, reapedPods int) <span class="cov9" title="11">{
+        deleteOptions := &amp;metav1.DeleteOptions{
+                GracePeriodSeconds: reaper.options.gracePeriod,
+        }
+
+        podLog := logrus.WithFields(logrus.Fields{
+                "pod":       pod.Name,
+                "namespace": pod.Namespace,
+                "reasons":   reasons,
+        })
+
+        if reaper.options.dryRun </span><span class="cov1" title="1">{
+                podLog.Info("pod would be reaped but pod-reaper is in dry-run mode")
+                return
+        }</span>
+
+        <span class="cov9" title="10">if reaper.options.maxPods &gt; 0 &amp;&amp; reapedPods &gt;= reaper.options.maxPods </span><span class="cov3" title="2">{
+                podLog.WithFields(logrus.Fields{
+                        "reapedPods": reapedPods,
+                        "maxPods":    reaper.options.maxPods,
+                }).Info("pod would be reaped but maxPods is exceeded")
+                return
+        }</span>
+
+        <span class="cov8" title="8">podLog.Info("reaping pod")
+
+        // Create context with timeout for the API call
+        apiCtx, cancel := context.WithTimeout(ctx, reaper.options.apiTimeout)
+        defer cancel()
+
+        var err error
+        if reaper.options.evict </span><span class="cov1" title="1">{
+                err = reaper.clientSet.PolicyV1().Evictions(pod.Namespace).Evict(apiCtx, &amp;policyv1.Eviction{
+                        ObjectMeta:    metav1.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name},
+                        DeleteOptions: deleteOptions,
+                })
+        }</span> else<span class="cov7" title="7"> {
+                err = reaper.clientSet.CoreV1().Pods(pod.Namespace).Delete(apiCtx, pod.Name, *deleteOptions)
+        }</span>
+        <span class="cov8" title="8">if err != nil </span><span class="cov1" title="1">{
+                podLog.WithError(err).Warn("unable to delete pod")
+        }</span>
+}
+
+func (reaper reaper) scytheCycle(ctx context.Context) <span class="cov6" title="5">{
+        logrus.WithField("namespace", reaper.options.namespace).Debug("starting reap cycle")
+
+        pods, err := reaper.getPods(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                logrus.WithError(err).WithField("namespace", reaper.options.namespace).
+                        Error("failed to get pods, skipping cycle")
+                return
+        }</span>
+
+        <span class="cov6" title="5">reapedPods := 0
+        for i, pod := range pods.Items </span><span class="cov8" title="8">{
+                // Check for shutdown signal
+                select </span>{
+                case &lt;-ctx.Done():<span class="cov1" title="1">
+                        logrus.Info("shutdown signal received during reap cycle, stopping")
+                        return</span>
+                default:<span class="cov7" title="7"></span>
+                }
+
+                <span class="cov7" title="7">shouldReap, reasons := reaper.options.rules.ShouldReap(pod)
+                if shouldReap </span><span class="cov6" title="5">{
+                        reaper.reapPod(ctx, pod, reasons, reapedPods)
+                        reapedPods++
+
+                        // Apply deletion delay (rate limiting) if configured
+                        // Don't delay after the last pod
+                        if reaper.options.deletionDelay &gt; 0 &amp;&amp; i &lt; len(pods.Items)-1 </span><span class="cov0" title="0">{
+                                select </span>{
+                                case &lt;-ctx.Done():<span class="cov0" title="0">
+                                        logrus.Info("shutdown signal received during deletion delay, stopping")
+                                        return</span>
+                                case &lt;-time.After(reaper.options.deletionDelay):<span class="cov0" title="0"></span>
+                                }
+                        }
+                }
+        }
+
+        <span class="cov5" title="4">logrus.WithField("reapedPods", reapedPods).Debug("completed reap cycle")</span>
+}
+
+func cronWithOptionalSeconds() *cron.Cron <span class="cov4" title="3">{
+        return cron.New(
+                cron.WithParser(
+                        cron.NewParser(
+                                // include optional seconds
+                                cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)))
+}</span>
+
+func (reaper reaper) harvest(ctx context.Context) <span class="cov4" title="3">{
+        runForever := reaper.options.runDuration == 0
+        schedule := cronWithOptionalSeconds()
+        _, err := schedule.AddFunc(reaper.options.schedule, func() </span><span class="cov0" title="0">{
+                reaper.scytheCycle(ctx)
+        }</span>)
+
+        <span class="cov4" title="3">if err != nil </span><span class="cov1" title="1">{
+                logrus.WithError(err).WithField("schedule", reaper.options.schedule).
+                        Panic("unable to create cron schedule")
+        }</span>
+
+        <span class="cov3" title="2">schedule.Start()
+        logrus.WithField("schedule", reaper.options.schedule).Info("started reap schedule")
+
+        if runForever </span><span class="cov1" title="1">{
+                &lt;-ctx.Done()
+                logrus.Info("shutdown signal received, stopping scheduler")
+        }</span> else<span class="cov1" title="1"> {
+                select </span>{
+                case &lt;-ctx.Done():<span class="cov0" title="0">
+                        logrus.Info("shutdown signal received, stopping scheduler")</span>
+                case &lt;-time.After(reaper.options.runDuration):<span class="cov1" title="1">
+                        logrus.Info("run duration elapsed, stopping scheduler")</span>
+                }
+        }
+
+        // Stop the cron scheduler gracefully
+        <span class="cov3" title="2">stopCtx := schedule.Stop()
+        &lt;-stopCtx.Done()
+        logrus.Info("scheduler stopped cleanly")</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package rules
+
+import (
+        "fmt"
+        "math/rand/v2"
+        "os"
+        "strconv"
+
+        v1 "k8s.io/api/core/v1"
+)
+
+const envChaosChance = "CHAOS_CHANCE"
+
+var _ Rule = (*chaos)(nil)
+
+type chaos struct {
+        chance float64
+}
+
+func (rule *chaos) load() (bool, string, error) <span class="cov5" title="16">{
+        value, active := os.LookupEnv(envChaosChance)
+        if !active </span><span class="cov3" title="4">{
+                return false, "", nil
+        }</span>
+        <span class="cov4" title="12">chance, err := strconv.ParseFloat(value, 64)
+        if err != nil </span><span class="cov2" title="3">{
+                return false, "", fmt.Errorf("invalid chaos chance %s", err)
+        }</span>
+        <span class="cov4" title="9">rule.chance = chance
+        return true, fmt.Sprintf("chaos chance %s", value), nil</span>
+}
+
+func (rule *chaos) ShouldReap(pod v1.Pod) (bool, string) <span class="cov10" title="505">{
+        return rand.Float64() &lt; rule.chance, "was flagged for chaos"
+}</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package rules
+
+import (
+        "fmt"
+        "os"
+        "strings"
+
+        "k8s.io/api/core/v1"
+)
+
+const envContainerStatus = "CONTAINER_STATUSES"
+
+var _ Rule = (*containerStatus)(nil)
+
+type containerStatus struct {
+        reapStatuses []string
+}
+
+func (rule *containerStatus) load() (bool, string, error) <span class="cov10" title="17">{
+        value, active := os.LookupEnv(envContainerStatus)
+        if !active </span><span class="cov3" title="2">{
+                return false, "", nil
+        }</span>
+        <span class="cov9" title="15">rule.reapStatuses = strings.Split(value, ",")
+        return true, fmt.Sprintf("container status in [%s]", value), nil</span>
+}
+
+func (rule *containerStatus) ShouldReap(pod v1.Pod) (bool, string) <span class="cov7" title="9">{
+        for _, reapStatus := range rule.reapStatuses </span><span class="cov8" title="12">{
+                for _, containerStatus := range pod.Status.ContainerStatuses </span><span class="cov8" title="10">{
+                        state := containerStatus.State
+                        // check both waiting and terminated conditions
+                        if (state.Waiting != nil &amp;&amp; state.Waiting.Reason == reapStatus) ||
+                                (state.Terminated != nil &amp;&amp; state.Terminated.Reason == reapStatus) </span><span class="cov4" title="3">{
+                                return true, fmt.Sprintf("has container status %s", reapStatus)
+                        }</span>
+                }
+
+                // Check init containers
+                <span class="cov7" title="9">for _, initContainerStatus := range pod.Status.InitContainerStatuses </span><span class="cov3" title="2">{
+                        state := initContainerStatus.State
+                        // Check both waiting and terminated conditions for init containers
+                        if (state.Waiting != nil &amp;&amp; state.Waiting.Reason == reapStatus) ||
+                                (state.Terminated != nil &amp;&amp; state.Terminated.Reason == reapStatus) </span><span class="cov3" title="2">{
+                                return true, fmt.Sprintf("has init container status %s", reapStatus)
+                        }</span>
+                }
+        }
+        <span class="cov5" title="4">return false, ""</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package rules
+
+import (
+        "fmt"
+        "os"
+        "time"
+
+        "k8s.io/api/core/v1"
+)
+
+const envMaxDuration = "MAX_DURATION"
+
+var _ Rule = (*duration)(nil)
+
+type duration struct {
+        duration time.Duration
+}
+
+func (rule *duration) load() (bool, string, error) <span class="cov10" title="15">{
+        value, active := os.LookupEnv(envMaxDuration)
+        if !active </span><span class="cov3" title="2">{
+                return false, "", nil
+        }</span>
+        <span class="cov9" title="13">duration, err := time.ParseDuration(value)
+        if err != nil </span><span class="cov1" title="1">{
+                return false, "", fmt.Errorf("invalid max duration: %s", err)
+        }</span>
+        <span class="cov9" title="12">rule.duration = duration
+        return true, fmt.Sprintf("maximum run duration %s", value), nil</span>
+}
+
+func (rule *duration) ShouldReap(pod v1.Pod) (bool, string) <span class="cov7" title="7">{
+        podStartTime := pod.Status.StartTime
+        if podStartTime == nil </span><span class="cov1" title="1">{
+                return false, ""
+        }</span>
+        <span class="cov6" title="6">startTime := time.Unix(podStartTime.Unix(), 0) // convert to standard go time
+        cutoffTime := time.Now().Add(-1 * rule.duration)
+        runningDuration := time.Now().Sub(startTime)
+        message := fmt.Sprintf("has been running for %s", runningDuration.String())
+        return startTime.Before(cutoffTime), message</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package rules
+
+import (
+        "fmt"
+        "os"
+        "strings"
+
+        "k8s.io/api/core/v1"
+)
+
+const envPodStatus = "POD_STATUSES"
+
+var _ Rule = (*podStatus)(nil)
+
+type podStatus struct {
+        reapStatuses []string
+}
+
+func (rule *podStatus) load() (bool, string, error) <span class="cov10" title="15">{
+        value, active := os.LookupEnv(envPodStatus)
+        if !active </span><span class="cov7" title="7">{
+                return false, "", nil
+        }</span>
+        <span class="cov7" title="8">rule.reapStatuses = strings.Split(value, ",")
+        return true, fmt.Sprintf("pod status in [%s]", value), nil</span>
+}
+
+func (rule *podStatus) ShouldReap(pod v1.Pod) (bool, string) <span class="cov6" title="5">{
+        status := pod.Status.Reason
+        for _, reapStatus := range rule.reapStatuses </span><span class="cov7" title="8">{
+                if status == reapStatus </span><span class="cov3" title="2">{
+                        return true, fmt.Sprintf("has pod status %s", reapStatus)
+                }</span>
+        }
+        <span class="cov4" title="3">return false, ""</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package rules
+
+import (
+        "fmt"
+        "os"
+        "strings"
+
+        v1 "k8s.io/api/core/v1"
+)
+
+const envPodStatusPhase = "POD_STATUS_PHASES"
+
+var _ Rule = (*podStatusPhase)(nil)
+
+type podStatusPhase struct {
+        reapStatusPhases []string
+}
+
+func (rule *podStatusPhase) load() (bool, string, error) <span class="cov10" title="19">{
+        value, active := os.LookupEnv(envPodStatusPhase)
+        if !active </span><span class="cov6" title="7">{
+                return false, "", nil
+        }</span>
+        <span class="cov8" title="12">rule.reapStatusPhases = strings.Split(value, ",")
+        return true, fmt.Sprintf("pod status phase in [%s]", value), nil</span>
+}
+
+func (rule *podStatusPhase) ShouldReap(pod v1.Pod) (bool, string) <span class="cov7" title="9">{
+        status := string(pod.Status.Phase)
+        for _, reapStatusPhase := range rule.reapStatusPhases </span><span class="cov8" title="12">{
+                if status == reapStatusPhase </span><span class="cov6" title="6">{
+                        return true, fmt.Sprintf("has pod status phase %s", reapStatusPhase)
+                }</span>
+        }
+        <span class="cov4" title="3">return false, ""</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package rules
+
+import (
+        "errors"
+
+        "github.com/sirupsen/logrus"
+        "k8s.io/api/core/v1"
+)
+
+// Rule is an interface defining the two functions needed for pod reaper to use the rule.
+type Rule interface {
+
+        // load attempts to load the load and returns whether the rule was loaded, a message that will be logged
+        // when the rule is loaded, and any error that may have occurred during the load.
+        load() (bool, string, error)
+
+        // ShouldReap takes a pod and returns whether the pod should be reaped based on this rule and a message that
+        // will be logged when the pod is selected for reaping.
+        ShouldReap(pod v1.Pod) (bool, string)
+}
+
+// Rules is a collection of loaded pod reaper rules.
+type Rules struct {
+        LoadedRules []Rule
+}
+
+// LoadRules load all the rules based on their own implementations
+func LoadRules() (Rules, error) <span class="cov5" title="8">{
+        // load all possible rules
+        rules := []Rule{
+                &amp;chaos{},
+                &amp;containerStatus{},
+                &amp;duration{},
+                &amp;unready{},
+                &amp;podStatus{},
+                &amp;podStatusPhase{},
+        }
+        // return only the active rules
+        loadedRules := []Rule{}
+        for _, rule := range rules </span><span class="cov10" title="43">{
+                load, message, err := rule.load()
+                if err != nil </span><span class="cov1" title="1">{
+                        return Rules{LoadedRules: loadedRules}, err
+                }</span> else<span class="cov9" title="42"> if load </span><span class="cov8" title="19">{
+                        logrus.WithField("rule", message).Info("loaded rule")
+                        loadedRules = append(loadedRules, rule)
+                }</span>
+        }
+        // return an error if no rules where loaded
+        <span class="cov5" title="7">if len(loadedRules) == 0 </span><span class="cov1" title="1">{
+                return Rules{LoadedRules: loadedRules}, errors.New("no rules were loaded")
+        }</span>
+        <span class="cov5" title="6">return Rules{LoadedRules: loadedRules}, nil</span>
+}
+
+// ShouldReap takes a pod and return whether the pod should be reaped based on this rule.
+// Also includes a message describing why the pod was flagged for reaping.
+func (rules Rules) ShouldReap(pod v1.Pod) (bool, []string) <span class="cov4" title="4">{
+        var reasons []string
+        for _, rule := range rules.LoadedRules </span><span class="cov5" title="7">{
+                reap, reason := rule.ShouldReap(pod)
+                if !reap </span><span class="cov2" title="2">{
+                        return false, []string{}
+                }</span>
+                <span class="cov4" title="5">reasons = append(reasons, reason)</span>
+        }
+        <span class="cov2" title="2">return true, reasons</span>
+}
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package rules
+
+import (
+        "fmt"
+        "os"
+        "time"
+
+        "k8s.io/api/core/v1"
+)
+
+const envMaxUnready = "MAX_UNREADY"
+
+var _ Rule = (*unready)(nil)
+
+type unready struct {
+        duration time.Duration
+}
+
+func (rule *unready) load() (bool, string, error) <span class="cov10" title="17">{
+        value, active := os.LookupEnv(envMaxUnready)
+        if !active </span><span class="cov7" title="7">{
+                return false, "", nil
+        }</span>
+        <span class="cov8" title="10">duration, err := time.ParseDuration(value)
+        if err != nil </span><span class="cov1" title="1">{
+                return false, "", fmt.Errorf("invalid max unready duration: %s", err)
+        }</span>
+        <span class="cov7" title="9">rule.duration = duration
+        return true, fmt.Sprintf("maximum unready %s", value), nil</span>
+}
+
+func (rule *unready) ShouldReap(pod v1.Pod) (bool, string) <span class="cov7" title="7">{
+        condition := getCondition(pod, v1.PodReady)
+        if condition == nil || condition.Status == "True" </span><span class="cov3" title="2">{
+                return false, ""
+        }</span>
+
+        // Defensive check: if LastTransitionTime is zero, we can't reliably determine
+        // how long the pod has been unready, so skip reaping
+        <span class="cov6" title="5">if condition.LastTransitionTime.IsZero() </span><span class="cov1" title="1">{
+                return false, ""
+        }</span>
+
+        <span class="cov5" title="4">transitionTime := time.Unix(condition.LastTransitionTime.Unix(), 0) // convert to standard go time
+        cutoffTime := time.Now().Add(-1 * rule.duration)
+        unreadyDuration := time.Now().Sub(transitionTime)
+        message := fmt.Sprintf("has been unready for %s", unreadyDuration.String())
+        return transitionTime.Before(cutoffTime), message</span>
+}
+
+func getCondition(pod v1.Pod, conditionType v1.PodConditionType) *v1.PodCondition <span class="cov7" title="7">{
+        for _, condition := range pod.Status.Conditions </span><span class="cov6" title="6">{
+                if condition.Type == conditionType </span><span class="cov6" title="6">{
+                        return &amp;condition
+                }</span>
+        }
+
+        <span class="cov1" title="1">return nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

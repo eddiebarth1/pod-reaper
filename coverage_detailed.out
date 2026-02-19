@@ -1,4 +1,4 @@
-mode: atomic
+mode: count
 github.com/target/pod-reaper/rules/chaos.go:20.49,22.13 2 16
 github.com/target/pod-reaper/rules/chaos.go:22.13,24.3 1 4
 github.com/target/pod-reaper/rules/chaos.go:25.2,26.16 2 12
